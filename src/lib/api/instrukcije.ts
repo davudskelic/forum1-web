@@ -10,6 +10,9 @@ export const instrukcijeApi = {
   lista: () =>
     api.get<Instrukcija[]>(BASE).then((r) => r.data),
 
+  listaPaged: (skip: number, take = 20) =>
+    api.get<Instrukcija[]>(`${BASE}/paged?skip=${skip}&take=${take}`).then((r) => r.data),
+
   dajKorisnikovaInstrukcije: (korisnikId: number) =>
     api.get<Instrukcija[]>(`${BASE}/korisnik/${korisnikId}`).then((r) => r.data),
 

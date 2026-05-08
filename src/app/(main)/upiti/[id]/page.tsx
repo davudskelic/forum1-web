@@ -495,8 +495,10 @@ export default function UpitDetailPage() {
   const [lightboxSrc,   setLightboxSrc]   = useState<string | null>(null);
   const [reportOpen,    setReportOpen]    = useState(false);
   const [reportSending, setReportSending] = useState(false);
-  const [topCommentId,  setTopCommentId]  = useState<number | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [topCommentId,     setTopCommentId]     = useState<number | null>(null);
+  const [commentsVisible,  setCommentsVisible]  = useState(20);
+  const textareaRef     = useRef<HTMLTextAreaElement>(null);
+  const commentSentinel = useRef<HTMLDivElement>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -529,6 +531,18 @@ export default function UpitDetailPage() {
   };
 
   useEffect(() => { if (id) loadAll(); }, [id]);
+
+  useEffect(() => {
+    const sentinel = commentSentinel.current;
+    if (!sentinel || loading) return;
+    const obs = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) setCommentsVisible(v => v + 20); },
+      { threshold: 0.1 }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commentsVisible, loading, komentari.length]);
 
   /* read topComment from localStorage (set by notification click) */
   useEffect(() => {
@@ -772,16 +786,24 @@ export default function UpitDetailPage() {
                     ...reversed.filter(k => k.id !== topCommentId),
                   ]
                 : reversed;
-              return ordered.map((k, idx) => (
-                <div key={k.id} style={topCommentId && idx === 0 ? { borderLeft:"3px solid #34abc0", borderRadius:"0 8px 8px 0", background:"#f0fbfd" } : undefined}>
-                  <KomentarCard
-                    komentar={k}
-                    user={usersMap.get(k.korisnikID)}
-                    canDelete={!!currentUser && (currentUser.id === k.korisnikID || isAdmin || isOwner)}
-                    onDelete={() => setConfirmDel(k.id)}
-                  />
-                </div>
-              ));
+              const visible = ordered.slice(0, commentsVisible);
+              return (
+                <>
+                  {visible.map((k, idx) => (
+                    <div key={k.id} style={topCommentId && idx === 0 ? { borderLeft:"3px solid #34abc0", borderRadius:"0 8px 8px 0", background:"#f0fbfd" } : undefined}>
+                      <KomentarCard
+                        komentar={k}
+                        user={usersMap.get(k.korisnikID)}
+                        canDelete={!!currentUser && (currentUser.id === k.korisnikID || isAdmin || isOwner)}
+                        onDelete={() => setConfirmDel(k.id)}
+                      />
+                    </div>
+                  ))}
+                  {commentsVisible < ordered.length && (
+                    <div ref={commentSentinel} style={{ height: 1 }} />
+                  )}
+                </>
+              );
             })()}
           </div>
         )}

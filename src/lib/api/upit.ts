@@ -10,6 +10,9 @@ export const upitApi = {
   lista: () =>
     api.get<Upit[]>(BASE).then((r) => r.data),
 
+  listaPaged: (skip: number, take = 20) =>
+    api.get<Upit[]>(`${BASE}/paged?skip=${skip}&take=${take}`).then((r) => r.data),
+
   dajKorisnikovUpite: (korisnikId: number) =>
     api.get<Upit[]>(`${BASE}/korisnik/${korisnikId}`).then((r) => r.data),
 

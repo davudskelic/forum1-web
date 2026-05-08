@@ -411,6 +411,9 @@ function AddBtn({ onClick }: { onClick: () => void }) {
 export default function InstrukcijePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
+
+  const TAKE = 20;
+
   const [instrukcije,     setInstrukcije]     = useState<Instrukcija[]>([]);
   const [tipoviZnanosti,  setTipoviZnanosti]  = useState<TipZnanosti[]>([]);
   const [gradovi,         setGradovi]         = useState<Grad[]>([]);
@@ -418,6 +421,9 @@ export default function InstrukcijePage() {
   const [gradoviMap,      setGradoviMap]      = useState<Map<number, Grad>>(new Map());
   const [tipoviMap,       setTipoviMap]       = useState<Map<number, TipZnanosti>>(new Map());
   const [loading,         setLoading]         = useState(true);
+  const [loadingMore,     setLoadingMore]     = useState(false);
+  const [hasMore,         setHasMore]         = useState(true);
+  const [skip,            setSkip]            = useState(0);
   const [loadError,       setLoadError]       = useState<string | null>(null);
   const [search,          setSearch]          = useState("");
   const [selectedTipId,   setSelectedTipId]   = useState<number | null>(null);
@@ -426,19 +432,30 @@ export default function InstrukcijePage() {
   const [searchFocused,   setSearchFocused]   = useState(false);
   const searchRef    = useRef<HTMLInputElement>(null);
   const handledRef   = useRef("");
+  const sentinelRef  = useRef<HTMLDivElement>(null);
+
+  const fetchUsers = async (items: Instrukcija[]) => {
+    const ids = [...new Set(items.map(i => i.korisnikID))];
+    const results = await Promise.allSettled(ids.map(id => korisnikApi.dajPoId(id)));
+    setUsersMap(prev => {
+      const map = new Map(prev);
+      results.forEach((r, idx) => { if (r.status === "fulfilled" && r.value) map.set(ids[idx], r.value); });
+      return map;
+    });
+  };
 
   const load = async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const [iResult, tResult, gResult] = await Promise.allSettled([
-        instrukcijeApi.lista(),
+        instrukcijeApi.listaPaged(0, TAKE),
         tipZnanostiApi.lista(),
         gradApi.lista(),
       ]);
 
       const loadedInst: Instrukcija[] = iResult.status === "fulfilled" ? (iResult.value ?? []) : [];
-      if (iResult.status === "fulfilled") setInstrukcije(loadedInst);
+      if (iResult.status === "fulfilled") { setInstrukcije(loadedInst); setSkip(TAKE); setHasMore(loadedInst.length === TAKE); }
       else setLoadError(`Greška: ${(iResult.reason as Error)?.message ?? "Nepoznata greška"}`);
 
       const loadedTipovi: TipZnanosti[] = tResult.status === "fulfilled" ? (tResult.value ?? []) : [];
@@ -457,21 +474,40 @@ export default function InstrukcijePage() {
         setGradoviMap(gMap);
       }
 
-      if (loadedInst.length > 0) {
-        const ids = [...new Set(loadedInst.map(i => i.korisnikID))];
-        const results = await Promise.allSettled(ids.map(id => korisnikApi.dajPoId(id)));
-        const map = new Map<number, Korisnik>();
-        results.forEach((r, idx) => {
-          if (r.status === "fulfilled" && r.value) map.set(ids[idx], r.value);
-        });
-        setUsersMap(map);
-      }
+      if (loadedInst.length > 0) await fetchUsers(loadedInst);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const more = await instrukcijeApi.listaPaged(skip, TAKE);
+      if (more.length === 0) { setHasMore(false); return; }
+      setInstrukcije(prev => [...prev, ...more]);
+      setSkip(prev => prev + TAKE);
+      setHasMore(more.length === TAKE);
+      await fetchUsers(more);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || loading) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skip, loadingMore, hasMore, loading]);
 
   useEffect(() => {
     const str = searchParams.toString();
@@ -595,16 +631,29 @@ export default function InstrukcijePage() {
             </p>
           </div>
         ) : (
-          filtered.map(inst => (
-            <InstrukcijaCard
-              key={inst.id}
-              inst={inst}
-              user={usersMap.get(inst.korisnikID)}
-              grad={gradoviMap.get(inst.gradId)}
-              tip={inst.tipZnanostiID ? tipoviMap.get(inst.tipZnanostiID) : null}
-              onClick={() => router.push(`/instrukcije/${inst.id}`)}
-            />
-          ))
+          <>
+            {filtered.map(inst => (
+              <InstrukcijaCard
+                key={inst.id}
+                inst={inst}
+                user={usersMap.get(inst.korisnikID)}
+                grad={gradoviMap.get(inst.gradId)}
+                tip={inst.tipZnanostiID ? tipoviMap.get(inst.tipZnanostiID) : null}
+                onClick={() => router.push(`/instrukcije/${inst.id}`)}
+              />
+            ))}
+            {!search && !selectedTipId && !selectedGradId && (
+              <>
+                {loadingMore && (
+                  <>
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </>
+                )}
+                <div ref={sentinelRef} style={{ height: 1 }} />
+              </>
+            )}
+          </>
         )}
       </div>
 

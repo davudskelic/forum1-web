@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/authStore";
 import { korisnikApi } from "@/lib/api";
@@ -155,7 +155,13 @@ export default function AdminPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
-  const [roleLoading, setRoleLoading] = useState<number | null>(null);
+  const [roleLoading,       setRoleLoading]       = useState<number | null>(null);
+  const [prijaveVisible,    setPrijaveVisible]    = useState(20);
+  const [korisnikVisible,   setKorisnikVisible]   = useState(20);
+  const [ulogeVisible,      setUlogeVisible]      = useState(20);
+  const prijaveRef  = useRef<HTMLDivElement>(null);
+  const korisnikRef = useRef<HTMLDivElement>(null);
+  const ulogeRef    = useRef<HTMLDivElement>(null);
 
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok });
@@ -195,6 +201,9 @@ export default function AdminPage() {
   const handleTabChange = (t: Tab) => {
     setTab(t);
     setSearch("");
+    setPrijaveVisible(20);
+    setKorisnikVisible(20);
+    setUlogeVisible(20);
   };
 
   /* confirm handlers */
@@ -265,6 +274,47 @@ export default function AdminPage() {
       setRoleLoading(null);
     }
   };
+
+  useEffect(() => {
+    const sentinel = prijaveRef.current;
+    if (!sentinel || loading || tab !== "prijave") return;
+    const obs = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) setPrijaveVisible(v => v + 20); },
+      { threshold: 0.1 }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prijaveVisible, loading, tab, prijave.length]);
+
+  useEffect(() => {
+    const sentinel = korisnikRef.current;
+    if (!sentinel || loading || tab !== "korisnici") return;
+    const obs = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) setKorisnikVisible(v => v + 20); },
+      { threshold: 0.1 }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [korisnikVisible, loading, tab, korisnici.length, search]);
+
+  useEffect(() => {
+    const sentinel = ulogeRef.current;
+    if (!sentinel || loading || tab !== "uloge") return;
+    const obs = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) setUlogeVisible(v => v + 20); },
+      { threshold: 0.1 }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ulogeVisible, loading, tab, korisnici.length, search]);
+
+  useEffect(() => {
+    setKorisnikVisible(20);
+    setUlogeVisible(20);
+  }, [search]);
 
   /* derived lists */
   const filteredKorisnici = korisnici.filter(k =>
@@ -393,7 +443,7 @@ export default function AdminPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {prijave.map((p) => (
+                {prijave.slice(0, prijaveVisible).map((p) => (
                   <div key={p.id} style={{ background: "white", borderRadius: 12, border: "1px solid #e5e7eb", padding: "16px 20px" }}>
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -431,6 +481,9 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+                {prijaveVisible < prijave.length && (
+                  <div ref={prijaveRef} style={{ height: 1 }} />
+                )}
               </div>
             )}
           </div>
@@ -464,7 +517,7 @@ export default function AdminPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {filteredKorisnici.map(k => (
+              {filteredKorisnici.slice(0, korisnikVisible).map(k => (
                 <div key={k.id} style={{ background: "white", borderRadius: 10, border: "1px solid #e5e7eb", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                   <Avatar className="w-9 h-9">
                     {k.profilna && k.profilna !== "obicna.png" && <AvatarImage src={k.profilna} />}
@@ -487,6 +540,9 @@ export default function AdminPage() {
                   )}
                 </div>
               ))}
+              {korisnikVisible < filteredKorisnici.length && (
+                <div ref={korisnikRef} style={{ height: 1 }} />
+              )}
             </div>
           </div>
         )}
@@ -587,7 +643,7 @@ export default function AdminPage() {
                 </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {regular.filter(k => k.email.toLowerCase().includes(search.toLowerCase())).map(k => (
+                {regular.filter(k => k.email.toLowerCase().includes(search.toLowerCase())).slice(0, ulogeVisible).map(k => (
                   <div key={k.id} style={{ background: "white", borderRadius: 10, border: "1px solid #e5e7eb", padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
                     <Avatar className="w-8 h-8">
                       {k.profilna && k.profilna !== "obicna.png" && <AvatarImage src={k.profilna} />}
@@ -614,6 +670,9 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+                {ulogeVisible < regular.filter(k => k.email.toLowerCase().includes(search.toLowerCase())).length && (
+                  <div ref={ulogeRef} style={{ height: 1 }} />
+                )}
               </div>
             </section>
           </div>

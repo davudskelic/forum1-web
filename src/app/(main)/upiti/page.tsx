@@ -556,30 +556,45 @@ export default function UpitiPage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
+  const TAKE = 20;
+
   const [upiti,           setUpiti]           = useState<Upit[]>([]);
   const [tipoviZnanosti,  setTipoviZnanosti]  = useState<TipZnanosti[]>([]);
   const [tipoviMap,       setTipoviMap]       = useState<Map<number, TipZnanosti>>(new Map());
   const [usersMap,        setUsersMap]        = useState<Map<number, Korisnik>>(new Map());
   const [loading,         setLoading]         = useState(true);
+  const [loadingMore,     setLoadingMore]     = useState(false);
+  const [hasMore,         setHasMore]         = useState(true);
+  const [skip,            setSkip]            = useState(0);
   const [loadError,       setLoadError]       = useState<string | null>(null);
   const [search,          setSearch]          = useState("");
   const [selectedTipId,   setSelectedTipId]   = useState<number | null>(null);
   const [showAddModal,    setShowAddModal]     = useState(false);
   const [searchFocused,   setSearchFocused]   = useState(false);
-  const searchRef  = useRef<HTMLInputElement>(null);
-  const handledRef = useRef("");
+  const searchRef   = useRef<HTMLInputElement>(null);
+  const handledRef  = useRef("");
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const fetchUsers = async (items: Upit[]) => {
+    const ids = [...new Set(items.map(u => u.korisnikID))];
+    const results = await Promise.allSettled(ids.map(id => korisnikApi.dajPoId(id)));
+    setUsersMap(prev => {
+      const map = new Map(prev);
+      results.forEach((r, i) => { if (r.status === "fulfilled" && r.value) map.set(ids[i], r.value); });
+      return map;
+    });
+  };
 
   const load = async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const [uResult, tResult] = await Promise.allSettled([
-        upitApi.lista(),
+        upitApi.listaPaged(0, TAKE),
         tipZnanostiApi.lista(),
       ]);
-
       const loadedUpiti: Upit[] = uResult.status === "fulfilled" ? (uResult.value ?? []) : [];
-      if (uResult.status === "fulfilled") setUpiti(loadedUpiti);
+      if (uResult.status === "fulfilled") { setUpiti(loadedUpiti); setSkip(TAKE); setHasMore(loadedUpiti.length === TAKE); }
       else setLoadError(`Greška: ${(uResult.reason as Error)?.message ?? "Nepoznata greška"}`);
       if (tResult.status === "fulfilled") {
         const tipovi = tResult.value ?? [];
@@ -588,23 +603,40 @@ export default function UpitiPage() {
         tipovi.forEach(t => tMap.set(t.id, t));
         setTipoviMap(tMap);
       }
-
-      // fetch users for all unique korisnikIDs
-      if (loadedUpiti.length > 0) {
-        const ids = [...new Set(loadedUpiti.map(u => u.korisnikID))];
-        const results = await Promise.allSettled(ids.map(id => korisnikApi.dajPoId(id)));
-        const map = new Map<number, Korisnik>();
-        results.forEach((r, i) => {
-          if (r.status === "fulfilled" && r.value) map.set(ids[i], r.value);
-        });
-        setUsersMap(map);
-      }
+      if (loadedUpiti.length > 0) await fetchUsers(loadedUpiti);
     } finally {
       setLoading(false);
     }
   };
 
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const more = await upitApi.listaPaged(skip, TAKE);
+      if (more.length === 0) { setHasMore(false); return; }
+      setUpiti(prev => [...prev, ...more]);
+      setSkip(prev => prev + TAKE);
+      setHasMore(more.length === TAKE);
+      await fetchUsers(more);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || loading) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { threshold: 0.1 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skip, loadingMore, hasMore, loading]);
 
   useEffect(() => {
     const str = searchParams.toString();
@@ -715,9 +747,22 @@ export default function UpitiPage() {
             </p>
           </div>
         ) : (
-          filtered.map(u => (
-            <UpitCard key={u.id} upit={u} user={usersMap.get(u.korisnikID)} tip={u.tipZnanostiID ? tipoviMap.get(u.tipZnanostiID) : null} onClick={() => router.push(`/upiti/${u.id}`)} />
-          ))
+          <>
+            {filtered.map(u => (
+              <UpitCard key={u.id} upit={u} user={usersMap.get(u.korisnikID)} tip={u.tipZnanostiID ? tipoviMap.get(u.tipZnanostiID) : null} onClick={() => router.push(`/upiti/${u.id}`)} />
+            ))}
+            {!search && !selectedTipId && (
+              <>
+                {loadingMore && (
+                  <>
+                    <SkeletonCard />
+                    <SkeletonCard />
+                  </>
+                )}
+                <div ref={sentinelRef} style={{ height: 1 }} />
+              </>
+            )}
+          </>
         )}
       </div>
 
