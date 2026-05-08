@@ -1,0 +1,10 @@
+export { korisnikApi } from "./korisnik";
+export { upitApi } from "./upit";
+export { instrukcijeApi } from "./instrukcije";
+export { komentarApi } from "./komentar";
+export { datotekaApi } from "./datoteka";
+export { folderApi } from "./folder";
+export { obavijestApi } from "./obavijest";
+export { fakultetApi, smjerApi, semestarApi, predmetApi, univerzitetApi } from "./fakultet";
+export { tipZnanostiApi, gradApi } from "./tipZnanosti";
+export { prijavaApi } from "./prijava";
