@@ -1,4 +1,4 @@
-import api from "@/lib/axios";
+import api from "@/lib/folderAxios";
 import type { Folder, Datoteka } from "@/types";
 
 const BASE = "api/folder";
@@ -11,10 +11,12 @@ export const folderApi = {
     api.get<Folder[]>(BASE).then((r) => r.data),
 
   dajZaPredmet: (predmetId: number) =>
-    api.get<Folder[]>(`api/predmet/${predmetId}/folderi`).then((r) => r.data),
+    api.get<Folder[]>(BASE).then((r) =>
+      (r.data ?? []).filter((f) => f.predmetId === predmetId)
+    ),
 
   dajDatoteke: (folderId: number) =>
-    api.get<Datoteka[]>(`${BASE}/${folderId}/datoteke`).then((r) => r.data),
+    api.get<Datoteka[]>(`${BASE}/${folderId}/datoteke`).then((r) => r.data ?? []),
 
   dodaj: (predmetId: number, folder: Partial<Folder>) =>
     api.post(`${BASE}/${predmetId}`, folder),

@@ -1,4 +1,4 @@
-import api from "@/lib/axios";
+import api from "@/lib/folderAxios";
 import type { Datoteka, Folder } from "@/types";
 
 const BASE = "api/datoteka";
